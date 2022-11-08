@@ -1,0 +1,193 @@
+---
+title: "Analysis of Usage of Smart Devices"
+author: "Anna Artemova"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Ask
+
+## Guiding questions
+
+**What is the problem you are trying to solve?**
+
+Bellabeat wants to become a bigger player at the market of smart devices. They want to understand what they need to change in their marketing strategy. They also want to know what are the usage patterns of the users of bigger smart device companies.
+
+**How can your insights drive business decisions?**
+
+I may find out that Bellabeat's devices lack something that other devices have. I may also identify what may become the special feature of Bellabeat products that should attract more clients. I may also identify if the target groups of other companies are different from what Bellabeat aims to.
+
+## Key tasks
+
+**Identify the business task**
+
+### The business task
+
+-   identify how the company can grow and become a bigger player at the smart device market
+
+### Consider key stakeholders
+
+-   The two Bellabeat founders, Urška Sršen and Sando Mur are part of executive team.
+
+-   The marketing team that analyses the data and suggests marketing strategy.
+
+# Prepare
+
+## The dataset
+
+The initially suggested dataset: FitBit dataset shared on Kaggle by Mobius. The data contains 18 .csv files with different **health measures** for 30 users:
+
+-   Daily activity
+
+    -   Total steps
+
+    -   Total distance
+
+    -   Very active distance
+
+    -   Moderately active distance
+
+    -   Light active distance
+
+    -   Sedentary active distance
+
+    -   Very active minutes
+
+    -   Fairly active minutes
+
+    -   Lightly active minutes
+
+    -   Sedentary active minutes
+
+    -   Calories
+
+-   Daily calories
+
+-   Hourly calories
+
+-   Minute calories (in narrow and wide formats)
+
+-   Daily intensities
+
+-   Hourly intensities
+
+-   Minute intensities (in narrow and wide formats)
+
+-   Daily steps
+
+-   Hourly steps
+
+-   Minute steps (in narrow and wide format)
+
+-   Heart rate seconds
+
+-   Day sleep
+
+-   Minute sleep
+
+-   Minute metabolic equivalence (MET)
+
+-   Weight Log
+
+The data was recorder during one month from April 12 to May 12, 2016.
+
+### Possible issues
+
+1)  The data is not current. They were recorded in 2016, i.e. 6 years ago.
+
+2)  These are users that gave their consent to publishing data and they may be different from those who didn't consent. It is also known that people's performance is different when they know they are being observed (see Hotorn's experiment).
+
+## Other datasets
+
+I browsed datasets on Kaggle
+
+[Fitness Trackers Products Ecommerce](https://www.kaggle.com/datasets/devsubhash/fitness-trackers-products-ecommerce?datasetId=1703404&sortBy=dateRun&tab=profile) dataset seems very promising at a first glance but it is actually specifically collected on the Indian Market, while the current projects aims at the global market.
+
+I did not manage to find anything else on Kaggle. Neither I could find anything relevant on BigQuery Public datasets, Google dataset search, Google Cloud public datasets.
+
+Therefore, the available data seems outdated and one should make conclusions or generalisations cautiously. I would appreciate if someone lets me know about other datasets that I could explore.
+
+# Method
+
+# Analysis
+
+```{r load libraries, echo=FALSE}
+library(tidyverse)
+library(easycsv) # to read multiple .csv files at once
+library(lubridate) # to work with dates
+```
+
+```{r read data}
+fitbit <- loadcsv_multi(
+  directory = "datasets/Fitabase Data 4.12.16-5.12.16",
+  extension = "CSV",
+  header = TRUE
+)
+```
+
+The data about activity only gives the data about users's behaviour but not about how they use the device. Most of the data is measured automatically, but there are some are put manually. In the current dataset such data is only available for weight log. Let's look at this data:
+
+### Weight data preprocessing
+
+```{r}
+str(weightLogInfo_merged)
+```
+
+Some datatypes are wrong, we fix them:
+
+```{r}
+# create a new dataset to wrangle and save the original one as it is
+weight <- weightLogInfo_merged %>%
+  mutate(
+    IsManualReport_new = case_when(
+      IsManualReport == "True" ~ "1",
+      TRUE ~ "0"
+    ),
+    ID_new = as.factor(Id),
+    LogId_new = as.factor(LogId),
+    date_new = mdy_hms(Date)
+  ) %>%
+  relocate(IsManualReport_new, .after = IsManualReport) %>% # reorder columns to be able to compare new and old variables
+  relocate(ID_new, .after = Id) %>% 
+  relocate(LogId_new, .after = LogId) %>% 
+  relocate(date_new, .after = Date) 
+
+
+# Check the variables now
+
+str(weight)
+```
+
+Looks good.
+
+Now I will preserve and rename the new variables and drop the old ones
+
+```{r}
+weight <- weight %>% 
+  select(-Id, -Date, -IsManualReport, -LogId) %>% 
+  rename(ID = ID_new,
+         date = date_new,
+         IsManualReport = IsManualReport_new,
+         LogId = LogId_new)
+```
+
+Now I check the data integrity. First I look for duplicates
+
+```{r}
+weight %>% 
+  duplicated() %>% 
+  sum()
+```
+
+There should be measures of 30 participants. Check how many IDs there are:
+
+```{r}
+weight %>% 
+  summarise(n_distinct(ID))
+```
+
+There are `r weight %>% summarise(n_distinct(ID))` participants. Assuming the data is not missing, it means that `r 8*0.3`% of the sample actually used the weight tracker.
