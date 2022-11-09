@@ -111,11 +111,9 @@ I did not manage to find anything else on Kaggle. Neither I could find anything 
 
 Therefore, the available data seems outdated and one should make conclusions or generalisations cautiously. I would appreciate if someone lets me know about other datasets that I could explore.
 
-# Method
-
 # Analysis
 
-```{r load libraries, echo=FALSE}
+```{r load libraries, message=FALSE}
 library(tidyverse)
 library(easycsv) # to read multiple .csv files at once
 library(lubridate) # to work with dates
@@ -130,6 +128,8 @@ fitbit <- loadcsv_multi(
 ```
 
 The data about activity only gives the data about users's behaviour but not about how they use the device. Most of the data is measured automatically, but there are some are put manually. In the current dataset such data is only available for weight log. Let's look at this data:
+
+## Weight data
 
 ### Weight data preprocessing
 
@@ -175,13 +175,26 @@ weight <- weight %>%
          LogId = LogId_new)
 ```
 
-Now I check the data integrity. First I look for duplicates
+Now I check the data integrity.
 
-```{r}
+```{r duplicates in weight}
 weight %>% 
   duplicated() %>% 
   sum()
 ```
+
+No duplicates.
+
+Check missing values:
+
+```{r na in weight}
+weight %>% 
+  gather(variable) %>% 
+  group_by(variable) %>% 
+  summarise(NAs = sum(is.na(value)))
+```
+
+65 of 67 observations for Fat are missing
 
 There should be measures of 30 participants. Check how many IDs there are:
 
@@ -190,4 +203,55 @@ weight %>%
   summarise(n_distinct(ID))
 ```
 
-There are `r weight %>% summarise(n_distinct(ID))` participants. Assuming the data is not missing, it means that `r 8*0.3`% of the sample actually used the weight tracker.
+### Pattern of tracking use
+
+There are `r weight %>% summarise(n_distinct(ID))` participants. Assuming the data is not missing, it means that `r 8*0.3`% of the sample actually used the weight tracker. It may be interesting to see if there is a correlation between using different products.
+
+But for now let's look at the pattern of using the weight tracking. I will also mark the two observations with fat record.
+
+```{r, message=FALSE}
+# if system locale is other than English:
+Sys.setlocale("LC_ALL","English")
+
+# create a separate dataset with fat records
+no_fat_na <- weight %>% 
+  filter(is.na(Fat)==FALSE)
+
+weight %>% 
+  ggplot(aes(date, ID))+
+  geom_point(aes(color = IsManualReport), alpha = 0.7, size = 4)+
+  geom_point(data = no_fat_na, shape = "circle open", size = 4, stroke = 1.5, aplha = 0.7)+
+  scale_x_datetime(name = "Date", date_breaks = "3 days", date_labels = "%b %d")+
+  scale_color_discrete(name = "Report Type",
+                     labels = c("0" = "Auto",
+                                "1" = "Manual"))+
+  labs(title = "How Partcipants Tracked Their Weight",
+       caption = "Stroke identifies observations with fat records")
+```
+
+So each users either writes new information manually, or automatically by the tracker but never both. **Most of users do it manually**. Why? Possible explanations: 
+- they do not have weights that automatically send the report to the tracker
+- they prefer to input manually because it brings them the feeling of a "checkmarked" task
+
+Moreover, the only two fat records are also input manually. 
+
+## Tracker usage
+
+We can try to see if there is any difference in what tracker participants use. This can be seen if some participants have records only on some trackers but not on others. 
+
+### Limitation
+- we don't know if the default traking options was possible to change
+- we don't know if the user actually used the imformation from tracking
+
+### Data preparation
+
+The Daily Activity dataset already includes Daily Calories, Daily Intensities, and Daily steps, which corresponds to the same number of observations in the four datasets:
+
+```{r}
+dailyActivity_merged %>% count(name = "Daily Activity Dataset") 
+dailyCalories_merged %>% count(name = "Daily Calories Dataset")
+dailyIntensities_merged %>% count(name = "Daily Intensities Dataset")
+dailySteps_merged %>% count(name = "Daily Steps Dataset")
+```
+
+Furthermore, there are datasets for heart rate by seconds, minute MET, and daily sleep.
