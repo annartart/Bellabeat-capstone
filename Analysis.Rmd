@@ -37,7 +37,7 @@ I may find out that Bellabeat's devices lack something that other devices have. 
 
 # Prepare
 
-## The dataset
+## The Fitbit dataset
 
 The initially suggested dataset: FitBit dataset shared on Kaggle by Mobius. The data contains 18 .csv files with different **health measures** for 30 users:
 
@@ -101,19 +101,23 @@ The data was recorder during one month from April 12 to May 12, 2016.
 
 2)  These are users that gave their consent to publishing data and they may be different from those who didn't consent. It is also known that people's performance is different when they know they are being observed (see Hotorn's experiment).
 
+3) There is no demographic information on this dataset. It is crucial because Bellabeat produces for women, and the relevance of the results depend on who the people in the Fitbit dataset are.
+
 ## Other datasets
 
 I browsed datasets on Kaggle
 
 [Fitness Trackers Products Ecommerce](https://www.kaggle.com/datasets/devsubhash/fitness-trackers-products-ecommerce?datasetId=1703404&sortBy=dateRun&tab=profile) dataset seems very promising at a first glance but it is actually specifically collected on the Indian Market, while the current projects aims at the global market.
 
-I did not manage to find anything else on Kaggle. Neither I could find anything relevant on BigQuery Public datasets, Google dataset search, Google Cloud public datasets.
+Thanks to the Kaggle user Salah who brought into attention another useful dataset in the [discussion forum](https://www.kaggle.com/datasets/arashnic/fitbit/discussion/313589). This dataset contains demographic information and the data was collected 2 years ago. Therefore, this dataset may be useful for the analysis, so I will include it in the project.
+
+I could not find anything relevant on BigQuery Public datasets, Google dataset search, Google Cloud public datasets.
 
 Therefore, the available data seems outdated and one should make conclusions or generalisations cautiously. I would appreciate if someone lets me know about other datasets that I could explore.
 
-# Analysis
+# Analysis: FitBit
 
-```{r load libraries, message=FALSE}
+```{r load libraries, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(easycsv) # to read multiple .csv files at once
 library(lubridate) # to work with dates
@@ -255,3 +259,144 @@ dailySteps_merged %>% count(name = "Daily Steps Dataset")
 ```
 
 Furthermore, there are datasets for heart rate by seconds, minute MET, and daily sleep.
+
+From each dataset I only need IDs.
+
+```{r}
+daily_activity_ids <- dailyActivity_merged %>%
+  select(Id) %>% 
+  distinct() %>% 
+  mutate(dataset = "daily_activity")
+
+heartrate_ids <- heartrate_seconds_merged %>% 
+  select(Id) %>% 
+  distinct() %>% 
+  mutate(dataset = "heartrate")
+
+MET_ids <- minuteMETsNarrow_merged %>% 
+  select(Id) %>% 
+  distinct() %>% 
+  mutate(dataset = "MET")
+
+sleep_ids <- dailySteps_merged %>% 
+  select(Id) %>% 
+  distinct() %>% 
+  mutate(dataset = "sleep")
+
+weight_ids <- weightLogInfo_merged %>% 
+  select(Id) %>% 
+  distinct() %>% 
+  mutate(dataset = "weight")
+
+# merge all ids into one dataset
+
+ids_by_dataset <- daily_activity_ids %>% 
+  bind_rows(heartrate_ids, MET_ids, sleep_ids, weight_ids)
+
+str(ids_by_dataset)
+```
+Both variables should be factors
+
+```{r}
+ids_by_dataset %>% 
+  mutate(ID = as.factor(Id),
+        ds = as.factor(dataset))
+
+# looks rights so we can overwrite the variables
+
+ids_by_dataset <- ids_by_dataset %>% 
+  transmute(ID = as.factor(Id),
+        dataset = as.factor(dataset))
+
+str(ids_by_dataset)
+```
+There are 33 IDs, while the data description on Kaggle says there are 30.
+
+Let's see which trackers are the most usable
+
+```{r}
+ids_by_dataset %>% 
+  group_by(dataset) %>% 
+  count() %>% 
+  arrange(-n)
+```
+Daily activity, MET, and sleep trackers are used by all participants, while heart rate and weight are much less 
+
+This also means that we can merge daily_activity, MET, and sleep
+
+```{r}
+ids_by_dataset <- ids_by_dataset %>% 
+  filter(dataset != "MET" & dataset != "sleep") %>% 
+  mutate(dataset = recode(dataset, daily_activity = "daily_activity_MET_sleep"))
+```
+
+Now we can explore
+
+```{r}
+ids_by_dataset %>% 
+  #filter(dataset != "daily_activity_MET_sleep") %>% 
+  ggplot(aes(dataset, ID))+
+  geom_tile(color = "white")
+```
+Therefore, there are four groups of users:
+- those who use **only activity tracker + MET tracker + sleep tracker**
+- those who use **activity+MET+sleep and heart rate** tracker
+- those who use **activity+MET+sleep and weight** tracker
+- those who use **all trackers**
+
+We can check if there is a relation in how people use heart rate tracker and sleep tracker.
+
+```{r}
+## we need another data structure, so I will create a new dataset for the analysis
+
+daily_activity_analysis <- dailyActivity_merged %>%
+  select(Id) %>% 
+  distinct() %>% 
+  mutate(daily_activity = "1")
+
+heartrate_analysis <- heartrate_seconds_merged %>% 
+  select(Id) %>% 
+  distinct() %>% 
+  mutate(heartrate = "1")
+
+MET_analysis <- minuteMETsNarrow_merged %>% 
+  select(Id) %>% 
+  distinct() %>% 
+  mutate(MET = "1")
+
+sleep_analysis <- dailySteps_merged %>% 
+  select(Id) %>% 
+  distinct() %>% 
+  mutate(sleep = "1")
+
+weight_analysis <- weightLogInfo_merged %>% 
+  select(Id) %>% 
+  distinct() %>% 
+  mutate(weight = "1")
+
+# merge all into one dataset
+
+datasets_by_ids <- daily_activity_analysis %>% 
+  full_join(heartrate_analysis) %>% 
+  full_join(MET_analysis) %>% 
+  full_join(sleep_analysis) %>% 
+  full_join(weight_analysis) %>% 
+  mutate(heartrate = as.factor(case_when(is.na(heartrate) == FALSE ~ "1",
+         TRUE ~ "0"
+         )),
+         weight = as.factor(case_when(is.na(weight) == FALSE ~ "1",
+         TRUE ~ "0"
+         ))) %>% 
+  select(-sleep, -MET) %>% 
+  rename(daily_activity_MET_sleep = daily_activity) %>% 
+  mutate(daily_activity_MET_sleep = factor(daily_activity_MET_sleep, levels = c("0", "1")))
+```
+I will use binomial regression because the variables are binary. 
+
+```{r}
+fit <- glm(weight ~ heartrate, 
+           family = "binomial",
+           data = datasets_by_ids)
+summary(fit)
+```
+There is no significant correlation between using of heart rate and weight trackers. Therefore, we can't say that using these trackers depend on each other.
