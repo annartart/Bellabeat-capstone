@@ -402,3 +402,9 @@ fit <- glm(weight ~ heartrate,
 summary(fit)
 ```
 There is no significant correlation between using of heart rate and weight trackers. Therefore, we can't say that using these trackers depend on each other.
+
+```{r}
+datasets_by_ids %>% 
+  gather("dataset", "using", daily_activity_MET_sleep, heartrate, weight)
+```
+
