@@ -263,93 +263,6 @@ Furthermore, there are datasets for heart rate by seconds, minute MET, and daily
 From each dataset I only need IDs.
 
 ```{r}
-daily_activity_ids <- dailyActivity_merged %>%
-  select(Id) %>% 
-  distinct() %>% 
-  mutate(dataset = "daily_activity")
-
-heartrate_ids <- heartrate_seconds_merged %>% 
-  select(Id) %>% 
-  distinct() %>% 
-  mutate(dataset = "heartrate")
-
-MET_ids <- minuteMETsNarrow_merged %>% 
-  select(Id) %>% 
-  distinct() %>% 
-  mutate(dataset = "MET")
-
-sleep_ids <- dailySteps_merged %>% 
-  select(Id) %>% 
-  distinct() %>% 
-  mutate(dataset = "sleep")
-
-weight_ids <- weightLogInfo_merged %>% 
-  select(Id) %>% 
-  distinct() %>% 
-  mutate(dataset = "weight")
-
-# merge all ids into one dataset
-
-ids_by_dataset <- daily_activity_ids %>% 
-  bind_rows(heartrate_ids, MET_ids, sleep_ids, weight_ids)
-
-str(ids_by_dataset)
-```
-Both variables should be factors
-
-```{r}
-ids_by_dataset %>% 
-  mutate(ID = as.factor(Id),
-        ds = as.factor(dataset))
-
-# looks rights so we can overwrite the variables
-
-ids_by_dataset <- ids_by_dataset %>% 
-  transmute(ID = as.factor(Id),
-        dataset = as.factor(dataset))
-
-str(ids_by_dataset)
-```
-There are 33 IDs, while the data description on Kaggle says there are 30.
-
-### Analysis
-
-Let's see which trackers are the most usable
-
-```{r}
-ids_by_dataset %>% 
-  group_by(dataset) %>% 
-  count() %>% 
-  arrange(-n)
-```
-Daily activity, MET, and sleep trackers are used by all participants, while heart rate and weight are much less 
-
-This also means that we can merge daily_activity, MET, and sleep
-
-```{r}
-ids_by_dataset <- ids_by_dataset %>% 
-  filter(dataset != "MET" & dataset != "sleep") %>% 
-  mutate(dataset = recode(dataset, daily_activity = "daily_activity_MET_sleep"))
-```
-
-Now we can explore
-
-```{r}
-ids_by_dataset %>% 
-  #filter(dataset != "daily_activity_MET_sleep") %>% 
-  ggplot(aes(dataset, ID))+
-  geom_tile(color = "white")
-```
-Therefore, there are four groups of users:
-- those who use **only activity tracker + MET tracker + sleep tracker**
-- those who use **activity+MET+sleep and heart rate** tracker
-- those who use **activity+MET+sleep and weight** tracker
-- those who use **all trackers**
-
-We can check if there is a relation in how people use heart rate tracker and sleep tracker.
-
-```{r}
-## we need another data structure, so I will create a new dataset for the analysis
 
 daily_activity_analysis <- dailyActivity_merged %>%
   select(Id) %>% 
@@ -378,7 +291,7 @@ weight_analysis <- weightLogInfo_merged %>%
 
 # merge all into one dataset
 
-datasets_by_ids <- daily_activity_analysis %>% 
+datasets_by_ids_wide <- daily_activity_analysis %>% 
   full_join(heartrate_analysis) %>% 
   full_join(MET_analysis) %>% 
   full_join(sleep_analysis) %>% 
@@ -388,23 +301,78 @@ datasets_by_ids <- daily_activity_analysis %>%
          )),
          weight = as.factor(case_when(is.na(weight) == FALSE ~ "1",
          TRUE ~ "0"
-         ))) %>% 
-  select(-sleep, -MET) %>% 
-  rename(daily_activity_MET_sleep = daily_activity) %>% 
-  mutate(daily_activity_MET_sleep = factor(daily_activity_MET_sleep, levels = c("0", "1")))
+         )))
+datasets_by_ids_narrow <- datasets_by_ids_wide %>% 
+  gather("dataset", "using", daily_activity, MET, sleep, heartrate, weight) %>% 
+  transmute(ID = as.factor(Id),
+         dataset = as.factor(dataset),
+         using = as.factor(using))
+
+str(datasets_by_ids_narrow)
 ```
-I will use binomial regression because the variables are binary. 
+```{r}
+datasets_by_ids_narrow %>% 
+  filter(using == "1") %>%
+  count(dataset) %>% 
+  arrange(-n)
+```
+We can merge daily activity, MET, and sleep, because everyone used it
 
 ```{r}
-fit <- glm(weight ~ heartrate, 
+datasets_by_ids_narrow <- datasets_by_ids_narrow %>% 
+  filter(dataset != "sleep" & dataset != "MET") %>% 
+  mutate(dataset = droplevels(recode_factor(dataset, daily_activity = "daily_activity_MET_sleep")))
+
+
+str(datasets_by_ids_narrow)
+
+datasets_by_ids_narrow %>% 
+  filter(using == "1") %>%
+  count(dataset) %>% 
+  arrange(-n)
+```
+
+Therefore, there are four groups of users:
+- those who use **only activity tracker + MET tracker + sleep tracker**
+- those who use **activity+MET+sleep and heart rate** tracker
+- those who use **activity+MET+sleep and weight** tracker
+- those who use **all trackers**
+
+Can we say that the groups are significantly different from each other?
+
+```{r}
+
+fit <- glm(using ~ dataset, 
            family = "binomial",
-           data = datasets_by_ids)
+           data = datasets_by_ids_narrow)
 summary(fit)
+
 ```
-There is no significant correlation between using of heart rate and weight trackers. Therefore, we can't say that using these trackers depend on each other.
+Even though the difference between the tracking count seems big, we cannot say the numbers are significantly different.
+
 
 ```{r}
-datasets_by_ids %>% 
-  gather("dataset", "using", daily_activity_MET_sleep, heartrate, weight)
+datasets_by_ids_narrow %>% 
+  filter(using == "1") %>% 
+  ggplot(aes(dataset))+
+  geom_bar(aes(fill = dataset))+
+  theme(legend.position = "none")+
+  scale_y_continuous(breaks = seq(0,33,5))
+```
+
+```{r}
+library(plotly)
+
+fig <- datasets_by_ids_narrow %>%
+  #spread(dataset, using) %>% 
+  #filter(using == "1") %>%
+  plot_ly(
+    x = ~dataset,
+    y = ~value,
+    color = ~ID,
+    type = "bar"
+  )
+
+fig
 ```
 
