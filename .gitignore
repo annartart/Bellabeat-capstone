@@ -3,5 +3,5 @@
 .RData
 .Ruserdata
 /Report_slides_files
-.qmd
+*.qmd
 /images

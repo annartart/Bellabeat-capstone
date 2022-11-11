@@ -101,7 +101,7 @@ The data was recorder during one month from April 12 to May 12, 2016.
 
 2)  These are users that gave their consent to publishing data and they may be different from those who didn't consent. It is also known that people's performance is different when they know they are being observed (see Hotorn's experiment).
 
-3) There is no demographic information on this dataset. It is crucial because Bellabeat produces for women, and the relevance of the results depend on who the people in the Fitbit dataset are.
+3)  There is no demographic information on this dataset. It is crucial because Bellabeat produces for women, and the relevance of the results depend on who the people in the Fitbit dataset are.
 
 ## Other datasets
 
@@ -233,19 +233,18 @@ weight %>%
        caption = "Stroke identifies observations with fat records")
 ```
 
-So each users either writes new information manually, or automatically by the tracker but never both. **Most of users do it manually**. Why? Possible explanations: 
-- they do not have weights that automatically send the report to the tracker
-- they prefer to input manually because it brings them the feeling of a "checkmarked" task
+So each users either writes new information manually, or automatically by the tracker but never both. **Most of users do it manually**. Why? Possible explanations: - they do not have weights that automatically send the report to the tracker - they prefer to input manually because it brings them the feeling of a "checkmarked" task
 
-Moreover, the only two fat records are also input manually. 
+Moreover, the only two fat records are also input manually.
 
 ## Tracker usage
 
-We can try to see if there is any difference in what tracker participants use. This can be seen if some participants have records only on some trackers but not on others. 
+We can try to see if there is any difference in what tracker participants use. This can be seen if some participants have records only on some trackers but not on others.
 
 ### Limitation
-- we don't know if the default traking options was possible to change
-- we don't know if the user actually used the imformation from tracking
+
+-   we don't know if the default traking options was possible to change
+-   we don't know if the user actually used the imformation from tracking
 
 ### Data preparation
 
@@ -310,12 +309,14 @@ datasets_by_ids_narrow <- datasets_by_ids_wide %>%
 
 str(datasets_by_ids_narrow)
 ```
+
 ```{r}
 datasets_by_ids_narrow %>% 
   filter(using == "1") %>%
   count(dataset) %>% 
   arrange(-n)
 ```
+
 We can merge daily activity, MET, and sleep, because everyone used it
 
 ```{r}
@@ -333,10 +334,11 @@ datasets_by_ids_narrow %>%
 ```
 
 Therefore, there are four groups of users:
-- those who use **only activity tracker + MET tracker + sleep tracker**
-- those who use **activity+MET+sleep and heart rate** tracker
-- those who use **activity+MET+sleep and weight** tracker
-- those who use **all trackers**
+
+-   those who use **only activity tracker + MET tracker + sleep tracker**
+-   those who use **activity+MET+sleep and heart rate** tracker
+-   those who use **activity+MET+sleep and weight** tracker
+-   those who use **all trackers**
 
 Can we say that the groups are significantly different from each other?
 
@@ -348,8 +350,8 @@ fit <- glm(using ~ dataset,
 summary(fit)
 
 ```
-Even though the difference between the tracking count seems big, we cannot say the numbers are significantly different.
 
+Even though the difference between the tracking count seems big, we cannot say the numbers are significantly different.
 
 ```{r}
 datasets_by_ids_narrow %>% 
@@ -357,22 +359,9 @@ datasets_by_ids_narrow %>%
   ggplot(aes(dataset))+
   geom_bar(aes(fill = dataset))+
   theme(legend.position = "none")+
-  scale_y_continuous(breaks = seq(0,33,5))
+  scale_x_discrete(labels = c(daily_activity_MET_sleep = "Daily Activity + MET + Sleep", heartrate = "Heartrate", weight = "Weight Log"))+
+  scale_y_continuous(breaks = seq(0,33,5))+
+  labs(title = "Number of Users of each tracker",
+       x = "Tracker",
+       y = "Count")
 ```
-
-```{r}
-library(plotly)
-
-fig <- datasets_by_ids_narrow %>%
-  #spread(dataset, using) %>% 
-  #filter(using == "1") %>%
-  plot_ly(
-    x = ~dataset,
-    y = ~value,
-    color = ~ID,
-    type = "bar"
-  )
-
-fig
-```
-
