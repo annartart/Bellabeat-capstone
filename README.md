@@ -30,3 +30,7 @@ The results identify the main points to focus on during marketing company.
 - users mostly fill in the weight data manually
 - activity, sleep, and MET trackers are very popular, everyone in the sample used it
 - weight tracker and heart rate tracker are less popular
+
+# Files
+- The anaysis script: Analysis.Rmd, or Analysis.html for a knitted report
+- If you only want to see the key outcome from the study, check Report_slides.html
